@@ -1,0 +1,33 @@
+# Environment
+.env
+*.env
+!.env.example
+
+# OAuth tokens (NEVER commit these)
+token.json
+credentials.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+.mypy_cache/
+
+# OS
+.DS_Store
+Thumbs.db
