@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import base64
 import json
+import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -26,8 +28,11 @@ from subscription_sync.models import EmailExtraction
 
 logger = structlog.get_logger()
 
-# Gmail API scopes (read-only)
+# Gmail API scopes (read-only — do not expand)
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+
+_EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+_CARD_RE = re.compile(r"\b(?:\d{4}[ -]?){3}\d{4}\b|\b\d{13,19}\b")
 
 # Query to find billing/subscription emails (high recall, LLM handles precision)
 BILLING_QUERY = (
@@ -112,11 +117,26 @@ def get_gmail_credentials(settings: Settings) -> Credentials:
         )
         creds = flow.run_local_server(port=0)
 
-    # Save refreshed token
-    with open(token_path, "w") as f:
-        f.write(creds.to_json())
+    # Save refreshed token with owner-only permissions
+    _write_token_file(token_path, creds.to_json())
 
     return creds
+
+
+def _write_token_file(path: str, contents: str) -> None:
+    """Write OAuth token.json with mode 0o600."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        os.write(fd, contents.encode("utf-8"))
+    finally:
+        os.close(fd)
+
+
+def redact_sensitive_text(text: str) -> str:
+    """Redact obvious email addresses and card numbers before sending to Claude."""
+    redacted = _EMAIL_RE.sub("[REDACTED_EMAIL]", text)
+    return _CARD_RE.sub("[REDACTED_CARD]", redacted)
 
 
 def authenticate_gmail(settings: Settings) -> None:
@@ -216,12 +236,15 @@ def extract_subscription_from_email(
     """
     client = Anthropic(api_key=settings.anthropic_api_key.get_secret_value())
 
+    subject = redact_sensitive_text(email["subject"])
+    body = redact_sensitive_text(email["body"])
+
     prompt = f"""Analyze this email and extract subscription/billing information.
 
-Subject: {email['subject']}
+Subject: {subject}
 
 Body:
-{email['body']}
+{body}
 
 If this is a subscription-related email (billing, receipt, renewal, cancellation),
 call the extract_subscription tool with the details. If this is NOT a subscription

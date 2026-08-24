@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     # Notion
     notion_api_key: SecretStr
     notion_database_id: str
+    notion_category_entertainment_page_id: str = ""
+    notion_category_business_page_id: str = ""
+    notion_category_education_page_id: str = ""
+    notion_category_health_page_id: str = ""
+    notion_category_decoration_page_id: str = ""
 
     # Anthropic
     anthropic_api_key: SecretStr
