@@ -13,6 +13,7 @@ from datetime import date
 
 import pytest
 
+from subscription_sync.email_parser import _write_token_file, redact_sensitive_text
 from subscription_sync.matcher import enrich_record, find_duplicate, infer_category
 from subscription_sync.models import (
     BillingCycle,
@@ -152,7 +153,13 @@ class TestSubscriptionRecord:
         assert quarterly.monthly_cost_estimate == 10.0
         assert yearly.monthly_cost_estimate == 10.0
 
-    def test_category_page_id_lookup(self) -> None:
+    def test_category_page_id_lookup(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NOTION_API_KEY", "test-notion-key")
+        monkeypatch.setenv("NOTION_DATABASE_ID", "test-database-id")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
+        monkeypatch.setenv(
+            "NOTION_CATEGORY_ENTERTAINMENT_PAGE_ID", "env-entertainment-page-id"
+        )
         record = SubscriptionRecord(
             name="Netflix",
             amount=15.99,
@@ -160,7 +167,7 @@ class TestSubscriptionRecord:
             subscribed_date=date(2024, 1, 1),
             category=CategoryName.ENTERTAINMENT,
         )
-        assert record.category_page_id == "30e3fef8-fd21-81f9-80fb-d236e6c97f5a"
+        assert record.category_page_id == "env-entertainment-page-id"
 
     def test_category_page_id_none_when_no_category(self) -> None:
         record = SubscriptionRecord(
@@ -336,3 +343,19 @@ class TestPipelineResult:
     def test_success_rate_zero_division(self) -> None:
         result = PipelineResult()
         assert result.success_rate == 0.0
+
+
+class TestRedactionAndTokenPermissions:
+    def test_redacts_email_and_card_number(self) -> None:
+        text = "Bill user@example.com card 4111-1111-1111-1111"
+        redacted = redact_sensitive_text(text)
+        assert "user@example.com" not in redacted
+        assert "4111-1111-1111-1111" not in redacted
+        assert "[REDACTED_EMAIL]" in redacted
+        assert "[REDACTED_CARD]" in redacted
+
+    def test_token_file_is_owner_read_write_only(self, tmp_path) -> None:
+        token_path = tmp_path / "token.json"
+        _write_token_file(str(token_path), '{"token":"secret"}')
+        assert token_path.read_text() == '{"token":"secret"}'
+        assert token_path.stat().st_mode & 0o777 == 0o600

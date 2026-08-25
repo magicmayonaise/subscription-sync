@@ -122,7 +122,7 @@ def status() -> None:
     settings = get_settings()
 
     console.print("[bold]Configuration:[/]")
-    console.print(f"  Notion DB: {settings.notion_database_id}")
+    console.print(f"  Notion DB: ...{settings.notion_database_id[-4:]}")
     console.print(f"  Lookback: {settings.lookback_days} days")
     console.print(f"  Confidence threshold: {settings.confidence_threshold}")
 

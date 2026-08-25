@@ -47,16 +47,21 @@ class CategoryName(str, Enum):
     DECORATION = "Decoration"
 
 
-# Hardcoded page IDs for category relation lookup.
-# These are the page IDs in the Categories database that the
-# 'Categories' relation property points to.
-CATEGORY_PAGE_IDS: dict[CategoryName, str] = {
-    CategoryName.ENTERTAINMENT: "30e3fef8-fd21-81f9-80fb-d236e6c97f5a",
-    CategoryName.BUSINESS: "30e3fef8-fd21-81ca-9ffb-c9a4b1b1312b",
-    CategoryName.EDUCATION: "30e3fef8-fd21-8130-8aed-c81e7f2b6fde",
-    CategoryName.HEALTH: "30e3fef8-fd21-81c1-bd3e-e3200f9f5ce3",
-    CategoryName.DECORATION: "30e3fef8-fd21-81a3-b5e9-e22db9b978b1",
-}
+def category_page_ids_from_settings(settings: object) -> dict[CategoryName, str]:
+    """Map category enums to Notion page IDs from environment-backed settings."""
+    return {
+        CategoryName.ENTERTAINMENT: getattr(
+            settings, "notion_category_entertainment_page_id", ""
+        ),
+        CategoryName.BUSINESS: getattr(settings, "notion_category_business_page_id", ""),
+        CategoryName.EDUCATION: getattr(
+            settings, "notion_category_education_page_id", ""
+        ),
+        CategoryName.HEALTH: getattr(settings, "notion_category_health_page_id", ""),
+        CategoryName.DECORATION: getattr(
+            settings, "notion_category_decoration_page_id", ""
+        ),
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -105,10 +110,17 @@ class SubscriptionRecord(BaseModel):
 
     @property
     def category_page_id(self) -> Optional[str]:
-        """Look up the Notion page ID for this record's category."""
+        """Look up the Notion page ID for this record's category from env settings."""
         if self.category is None:
             return None
-        return CATEGORY_PAGE_IDS.get(self.category)
+        from subscription_sync.config import get_settings
+
+        try:
+            settings = get_settings()
+        except Exception:
+            return None
+        value = category_page_ids_from_settings(settings).get(self.category, "")
+        return value.strip() or None
 
     def to_notion_properties(self) -> dict:
         """Serialize to Notion create-page property format.
